@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Shop Manager</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <style>
+        body { font-family: sans-serif; padding: 20px; background: #fdf2f2; }
+        .card { background: white; padding: 20px; border-radius: 10px; margin-bottom: 20px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); }
+        input, textarea, button { width: 100%; margin-bottom: 10px; padding: 12px; box-sizing: border-box; border-radius: 5px; border: 1px solid #ddd; }
+        button { background: #d63384; color: white; border: none; cursor: pointer; font-weight: bold; }
+        .del-btn { background: #ff4d4d; margin-top: 5px; padding: 8px; font-size: 12px; }
+        .list-item { display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid #eee; padding: 10px 0; }
+        img { border-radius: 5px; }
+    </style>
+</head>
+<body>
+
+<div class="card">
+    <h2>Add New Item</h2>
+    <input type="text" id="itemName" placeholder="Dress Name">
+    <input type="number" id="itemPrice" placeholder="Price (₦)">
+    <input type="file" id="itemImage" accept="image/*">
+    <button id="upBtn" onclick="uploadToSanity()">Post to Website</button>
+</div>
+
+<div class="card">
+    <h2>Current Inventory</h2>
+    <div id="inventory-list">Loading items...</div>
+</div>
+
+<script>
+    const PROJECT_ID = "q044uw50";
+    const TOKEN = "skSLhWZDxid2NpglUfI8IaIrDElkXM0kMWwUgcHHiVIOZc9LscI6RAyyF5HVI1BfSqGL222aqMC5riK8vVT4MHXTlj8FbchCNa4vKuz2yLo3QEI8aL8zswvj8RUrcySrh04o9KRNN32ClreiCG1VCq4Dj6rpKTym8dX2YKVAZIsH1YsVJhwb";
+    const DATASET = "production";
+
+    // 1. FETCH & DISPLAY ITEMS WITH DELETE BUTTONS
+    async function loadInventory() {
+        const query = encodeURIComponent('*[_type == "product"]{_id, name, "imageUrl": image.asset->url}');
+        const url = `https://${PROJECT_ID}.api.sanity.io/v2021-10-21/data/query/${DATASET}?query=${query}`;
+        
+        const res = await fetch(url);
+        const data = await res.json();
+        const list = document.getElementById('inventory-list');
+        list.innerHTML = "";
+
+        data.result.forEach(item => {
+            list.innerHTML += `
+                <div class="list-item">
+                    <div style="display:flex; align-items:center;">
+                        <img src="${item.imageUrl}" width="50" height="50" style="margin-right:10px; object-fit:cover;">
+                        <span>${item.name}</span>
+                    </div>
+                    <button class="del-btn" style="width:80px;" onclick="deleteItem('${item._id}')">Delete</button>
+                </div>
+            `;
+        });
+    }
+
+    // 2. DELETE FUNCTION
+    async function deleteItem(id) {
+        if(!confirm("Are you sure you want to remove this item?")) return;
+
+        const url = `https://${PROJECT_ID}.api.sanity.io/v2021-10-21/data/mutate/${DATASET}`;
+        
+        const response = await fetch(url, {
+            method: "POST",
+            headers: { "Authorization": `Bearer ${TOKEN}`, "Content-Type": "application/json" },
+            body: JSON.stringify({ mutations: [{ delete: { id: id } }] })
+        });
+
+        if(response.ok) {
+            alert("Item deleted!");
+            loadInventory(); // Refresh the list
+        }
+    }
+
+    // 3. UPLOAD FUNCTION (Same as before but adds refresh)
+    async function uploadToSanity() {
+        const name = document.getElementById('itemName').value;
+        const price = document.getElementById('itemPrice').value;
+        const imageFile = document.getElementById('itemImage').files[0];
+        const btn = document.getElementById('upBtn');
+
+        if (!name || !price || !imageFile) return alert("Fill all fields!");
+
+        btn.disabled = true;
+        try {
+            const imgAsset = await fetch(`https://${PROJECT_ID}.api.sanity.io/v2021-10-21/assets/images/${DATASET}`, {
+                method: "POST",
+                headers: { "Authorization": `Bearer ${TOKEN}`, "Content-Type": imageFile.type },
+                body: imageFile
+            }).then(res => res.json());
+
+            const productDoc = {
+                _type: 'product',
+                name: name,
+                price: parseFloat(price),
+                image: { _type: 'image', asset: { _type: "reference", _ref: imgAsset.document._id } }
+            };
+
+            await fetch(`https://${PROJECT_ID}.api.sanity.io/v2021-10-21/data/mutate/${DATASET}`, {
+                method: "POST",
+                headers: { "Authorization": `Bearer ${TOKEN}`, "Content-Type": "application/json" },
+                body: JSON.stringify({ mutations: [{ create: productDoc }] })
+            });
+
+            alert("Posted!");
+            loadInventory(); // Refresh the list
+        } catch (e) { alert("Error!"); }
+        btn.disabled = false;
+    }
+
+    // Load list on startup
+    loadInventory();
+</script>
+
+</body>
+</html>
