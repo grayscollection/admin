@@ -1,118 +1,109 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-    <title>Shop Manager</title>
+    <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GRAY COLLECTION</title>
     <style>
-        body { font-family: sans-serif; padding: 20px; background: #fdf2f2; }
-        .card { background: white; padding: 20px; border-radius: 10px; margin-bottom: 20px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); }
-        input, textarea, button { width: 100%; margin-bottom: 10px; padding: 12px; box-sizing: border-box; border-radius: 5px; border: 1px solid #ddd; }
-        button { background: #d63384; color: white; border: none; cursor: pointer; font-weight: bold; }
-        .del-btn { background: #ff4d4d; margin-top: 5px; padding: 8px; font-size: 12px; }
-        .list-item { display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid #eee; padding: 10px 0; }
-        img { border-radius: 5px; }
+        body { font-family: Arial, sans-serif; margin: 0; background: #fff5f8; padding-bottom: 140px; }
+        header { background: #d63384; color: white; padding: 20px; text-align: center; }
+        #shop-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 15px; padding: 15px; }
+        .product-card { background: white; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 8px rgba(0,0,0,0.1); text-align: center; padding-bottom: 15px; }
+        .product-card img { width: 100%; height: 180px; object-fit: cover; }
+        .price-tag { color: #d63384; font-weight: bold; display: block; margin: 5px 0; }
+        
+        select { width: 85%; padding: 5px; margin-bottom: 5px; border-radius: 4px; border: 1px solid #ddd; font-size: 12px; }
+        
+        .qty-row { display: flex; align-items: center; justify-content: center; margin: 10px auto; background: #f8f8f8; width: 85%; border-radius: 8px; padding: 5px; }
+        .btn-pm { background: #d63384; color: white; border: none; width: 30px; height: 30px; border-radius: 4px; font-size: 20px; cursor: pointer; }
+        .num { margin: 0 15px; font-weight: bold; }
+        
+        .add-btn { background: #333; color: white; border: none; padding: 12px; border-radius: 6px; width: 85%; cursor: pointer; font-size: 11px; font-weight: bold; }
+        
+        .order-bar { position: fixed; bottom: 0; left: 0; right: 0; background: white; padding: 20px; box-shadow: 0 -5px 20px rgba(0,0,0,0.15); display: none; flex-direction: column; gap: 10px; z-index: 9999; }
+        .final-btn { background: #25D366; color: white; text-decoration: none; padding: 16px; border-radius: 8px; font-weight: bold; text-align: center; font-size: 18px; }
     </style>
 </head>
 <body>
 
-<div class="card">
-    <h2>Add New Item</h2>
-    <input type="text" id="itemName" placeholder="Dress Name">
-    <input type="number" id="itemPrice" placeholder="Price (₦)">
-    <input type="file" id="itemImage" accept="image/*">
-    <button id="upBtn" onclick="uploadToSanity()">Post to Website</button>
-</div>
+<header><h1>GRAY'S COLLECTION</h1></header>
+<div id="shop-grid">Loading...</div>
 
-<div class="card">
-    <h2>Current Inventory</h2>
-    <div id="inventory-list">Loading items...</div>
+<div class="order-bar" id="order-bar">
+    <div style="display:flex; justify-content:space-between; font-weight:bold; color:#d63384;">
+        <span>Items: <span id="cart-count">0</span></span>
+        <span>Total: ₦<span id="cart-total">0</span></span>
+    </div>
+    <a href="#" class="final-btn" id="wa-link" target="_blank">ORDER NOW</a>
 </div>
 
 <script>
     const PROJECT_ID = "q044uw50";
-    const TOKEN = "skSLhWZDxid2NpglUfI8IaIrDElkXM0kMWwUgcHHiVIOZc9LscI6RAyyF5HVI1BfSqGL222aqMC5riK8vVT4MHXTlj8FbchCNa4vKuz2yLo3QEI8aL8zswvj8RUrcySrh04o9KRNN32ClreiCG1VCq4Dj6rpKTym8dX2YKVAZIsH1YsVJhwb";
     const DATASET = "production";
+    const WHATSAPP_NUMBER = "2349133269825"; 
+    let cart = [];
 
-    // 1. FETCH & DISPLAY ITEMS WITH DELETE BUTTONS
-    async function loadInventory() {
-        const query = encodeURIComponent('*[_type == "product"]{_id, name, "imageUrl": image.asset->url}');
-        const url = `https://${PROJECT_ID}.api.sanity.io/v2021-10-21/data/query/${DATASET}?query=${query}`;
+    function adjust(id, amt) {
+        const el = document.getElementById(`q-${id}`);
+        let v = parseInt(el.innerText) + amt;
+        if(v < 1) v = 1;
+        el.innerText = v;
+    }
+
+    function addToCart(name, price, id) {
+        const qty = parseInt(document.getElementById(`q-${id}`).innerText);
+        const size = document.getElementById(`s-${id}`).value;
+        const color = document.getElementById(`c-${id}`).value;
         
-        const res = await fetch(url);
-        const data = await res.json();
-        const list = document.getElementById('inventory-list');
-        list.innerHTML = "";
+        cart.push({ name, price, qty, size, color });
+        document.getElementById(`q-${id}`).innerText = "1";
+        updateUI();
+        alert("Added to Order!");
+    }
 
-        data.result.forEach(item => {
-            list.innerHTML += `
-                <div class="list-item">
-                    <div style="display:flex; align-items:center;">
-                        <img src="${item.imageUrl}" width="50" height="50" style="margin-right:10px; object-fit:cover;">
-                        <span>${item.name}</span>
+    function updateUI() {
+        const bar = document.getElementById('order-bar');
+        if (cart.length > 0) bar.style.display = 'flex';
+
+        let total = 0, count = 0, msg = "Hello! I want to order:\n\n";
+        cart.forEach(item => {
+            let line = item.price * item.qty;
+            total += line; count += item.qty;
+            msg += `• ${item.name} (${item.qty}pcs)\n   Size: ${item.size} | Color: ${item.color}\n   Price: ₦${line.toLocaleString()}\n\n`;
+        });
+        msg += `*TOTAL: ₦${total.toLocaleString()}*`;
+        document.getElementById('cart-count').innerText = count;
+        document.getElementById('cart-total').innerText = total.toLocaleString();
+        document.getElementById('wa-link').href = `https://wa.me/${WHATSAPP_NUMBER}?text=${encodeURIComponent(msg)}`;
+    }
+
+    async function load() {
+        const res = await fetch(`https://${PROJECT_ID}.api.sanity.io/v2021-10-21/data/query/${DATASET}?query=${encodeURIComponent('*[_type == "product"]{_id, name, price, sizes, colors, "img": image.asset->url}')}`);
+        const json = await res.json();
+        const grid = document.getElementById('shop-grid');
+        grid.innerHTML = "";
+        json.result.forEach(p => {
+            const id = p._id.replace(/[^a-zA-Z0-9]/g, '');
+            const sOpt = (p.sizes || "One Size").split(',').map(s => `<option value="${s.trim()}">${s.trim()}</option>`).join('');
+            const cOpt = (p.colors || "Default").split(',').map(c => `<option value="${c.trim()}">${c.trim()}</option>`).join('');
+            
+            grid.innerHTML += `
+                <div class="product-card">
+                    <img src="${p.img}">
+                    <h3 style="font-size:12px;">${p.name}</h3>
+                    <span class="price-tag">₦${p.price.toLocaleString()}</span>
+                    <select id="s-${id}">${sOpt}</select>
+                    <select id="c-${id}">${cOpt}</select>
+                    <div class="qty-row">
+                        <button class="btn-pm" onclick="adjust('${id}', -1)">-</button>
+                        <span class="num" id="q-${id}">1</span>
+                        <button class="btn-pm" onclick="adjust('${id}', 1)">+</button>
                     </div>
-                    <button class="del-btn" style="width:80px;" onclick="deleteItem('${item._id}')">Delete</button>
-                </div>
-            `;
+                    <button class="add-btn" onclick="addToCart('${p.name}', ${p.price}, '${id}')">ADD TO ORDER</button>
+                </div>`;
         });
     }
-
-    // 2. DELETE FUNCTION
-    async function deleteItem(id) {
-        if(!confirm("Are you sure you want to remove this item?")) return;
-
-        const url = `https://${PROJECT_ID}.api.sanity.io/v2021-10-21/data/mutate/${DATASET}`;
-        
-        const response = await fetch(url, {
-            method: "POST",
-            headers: { "Authorization": `Bearer ${TOKEN}`, "Content-Type": "application/json" },
-            body: JSON.stringify({ mutations: [{ delete: { id: id } }] })
-        });
-
-        if(response.ok) {
-            alert("Item deleted!");
-            loadInventory(); // Refresh the list
-        }
-    }
-
-    // 3. UPLOAD FUNCTION (Same as before but adds refresh)
-    async function uploadToSanity() {
-        const name = document.getElementById('itemName').value;
-        const price = document.getElementById('itemPrice').value;
-        const imageFile = document.getElementById('itemImage').files[0];
-        const btn = document.getElementById('upBtn');
-
-        if (!name || !price || !imageFile) return alert("Fill all fields!");
-
-        btn.disabled = true;
-        try {
-            const imgAsset = await fetch(`https://${PROJECT_ID}.api.sanity.io/v2021-10-21/assets/images/${DATASET}`, {
-                method: "POST",
-                headers: { "Authorization": `Bearer ${TOKEN}`, "Content-Type": imageFile.type },
-                body: imageFile
-            }).then(res => res.json());
-
-            const productDoc = {
-                _type: 'product',
-                name: name,
-                price: parseFloat(price),
-                image: { _type: 'image', asset: { _type: "reference", _ref: imgAsset.document._id } }
-            };
-
-            await fetch(`https://${PROJECT_ID}.api.sanity.io/v2021-10-21/data/mutate/${DATASET}`, {
-                method: "POST",
-                headers: { "Authorization": `Bearer ${TOKEN}`, "Content-Type": "application/json" },
-                body: JSON.stringify({ mutations: [{ create: productDoc }] })
-            });
-
-            alert("Posted!");
-            loadInventory(); // Refresh the list
-        } catch (e) { alert("Error!"); }
-        btn.disabled = false;
-    }
-
-    // Load list on startup
-    loadInventory();
+    load();
 </script>
-
 </body>
 </html>
