@@ -10,6 +10,7 @@
         button { background: #d63384; color: white; border: none; cursor: pointer; font-weight: bold; }
         .del-btn { background: #ff4d4d; margin-top: 5px; padding: 8px; font-size: 12px; }
         .list-item { display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid #eee; padding: 10px 0; }
+        .item-info { font-size: 13px; color: #666; }
         img { border-radius: 5px; }
     </style>
 </head>
@@ -19,9 +20,9 @@
     <h2>Add New Item</h2>
     <input type="text" id="itemName" placeholder="Dress Name">
     <input type="number" id="itemPrice" placeholder="Price (₦)">
+    <input type="text" id="itemColors" placeholder="Colors (e.g. Red, Blue, Black)">
+    <input type="text" id="itemSizes" placeholder="Sizes (e.g. S, M, L, XL)">
     
-    <input type="text" id="itemSizes" placeholder="Available Sizes (e.g. S, M, L, XL)">
-    <input type="text" id="itemColors" placeholder="Available Colors (e.g. Red, Blue, Black)">
     <input type="file" id="itemImage" accept="image/*">
     <button id="upBtn" onclick="uploadToSanity()">Post to Website</button>
 </div>
@@ -36,47 +37,59 @@
     const TOKEN = "skSLhWZDxid2NpglUfI8IaIrDElkXM0kMWwUgcHHiVIOZc9LscI6RAyyF5HVI1BfSqGL222aqMC5riK8vVT4MHXTlj8FbchCNa4vKuz2yLo3QEI8aL8zswvj8RUrcySrh04o9KRNN32ClreiCG1VCq4Dj6rpKTym8dX2YKVAZIsH1YsVJhwb";
     const DATASET = "production";
 
+    // 1. FETCH & DISPLAY
     async function loadInventory() {
-        const query = encodeURIComponent('*[_type == "product"]{_id, name, "imageUrl": image.asset->url}');
+        // Updated query to include colors and sizes
+        const query = encodeURIComponent('*[_type == "product"]{_id, name, colors, sizes, "imageUrl": image.asset->url}');
         const url = `https://${PROJECT_ID}.api.sanity.io/v2021-10-21/data/query/${DATASET}?query=${query}`;
+        
         const res = await fetch(url);
         const data = await res.json();
         const list = document.getElementById('inventory-list');
         list.innerHTML = "";
+
         data.result.forEach(item => {
             list.innerHTML += `
                 <div class="list-item">
                     <div style="display:flex; align-items:center;">
                         <img src="${item.imageUrl}" width="50" height="50" style="margin-right:10px; object-fit:cover;">
-                        <span>${item.name}</span>
+                        <div>
+                            <strong>${item.name}</strong><br>
+                            <span class="item-info">Sizes: ${item.sizes || 'N/A'} | Colors: ${item.colors || 'N/A'}</span>
+                        </div>
                     </div>
                     <button class="del-btn" style="width:80px;" onclick="deleteItem('${item._id}')">Delete</button>
-                </div>`;
+                </div>
+            `;
         });
     }
 
+    // 2. DELETE FUNCTION
     async function deleteItem(id) {
-        if(!confirm("Are you sure?")) return;
+        if(!confirm("Are you sure you want to remove this item?")) return;
         const url = `https://${PROJECT_ID}.api.sanity.io/v2021-10-21/data/mutate/${DATASET}`;
-        await fetch(url, {
+        const response = await fetch(url, {
             method: "POST",
             headers: { "Authorization": `Bearer ${TOKEN}`, "Content-Type": "application/json" },
             body: JSON.stringify({ mutations: [{ delete: { id: id } }] })
         });
-        loadInventory();
+        if(response.ok) { alert("Item deleted!"); loadInventory(); }
     }
 
+    // 3. UPLOAD FUNCTION
     async function uploadToSanity() {
         const name = document.getElementById('itemName').value;
         const price = document.getElementById('itemPrice').value;
-        const sizes = document.getElementById('itemSizes').value; // Added
-        const colors = document.getElementById('itemColors').value; // Added
+        const colors = document.getElementById('itemColors').value;
+        const sizes = document.getElementById('itemSizes').value;
         const imageFile = document.getElementById('itemImage').files[0];
         const btn = document.getElementById('upBtn');
 
         if (!name || !price || !imageFile) return alert("Fill all fields!");
 
         btn.disabled = true;
+        btn.innerText = "Uploading...";
+
         try {
             const imgAsset = await fetch(`https://${PROJECT_ID}.api.sanity.io/v2021-10-21/assets/images/${DATASET}`, {
                 method: "POST",
@@ -88,8 +101,8 @@
                 _type: 'product',
                 name: name,
                 price: parseFloat(price),
-                sizes: sizes, // Added to database
-                colors: colors, // Added to database
+                colors: colors, // Saved as string
+                sizes: sizes,   // Saved as string
                 image: { _type: 'image', asset: { _type: "reference", _ref: imgAsset.document._id } }
             };
 
@@ -99,14 +112,17 @@
                 body: JSON.stringify({ mutations: [{ create: productDoc }] })
             });
 
-            alert("Posted Successfully!");
+            alert("Posted!");
+            // Clear inputs
             document.getElementById('itemName').value = "";
             document.getElementById('itemPrice').value = "";
-            document.getElementById('itemSizes').value = "";
             document.getElementById('itemColors').value = "";
-            loadInventory();
+            document.getElementById('itemSizes').value = "";
+            loadInventory(); 
         } catch (e) { alert("Error!"); }
+        
         btn.disabled = false;
+        btn.innerText = "Post to Website";
     }
 
     loadInventory();
